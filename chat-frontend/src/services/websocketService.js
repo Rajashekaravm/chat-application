@@ -43,3 +43,10 @@ export const sendMessage = (message) => {
     body: JSON.stringify(message)
   });
 };
+
+export const disconnectWebSocket = () => {
+  if (stompClient && stompClient.connected) {
+    stompClient.deactivate();
+    stompClient = null;
+  }
+};
