@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import API from '../services/api';
+import { registerUser } from '../services/authService';
 
 function Register() {
 
@@ -8,8 +8,7 @@ function Register() {
 
   const [form, setForm] = useState({
     name: '',
-    email: '',
-    password: '',
+    phoneNumber: '',
     role: 'USER'
   });
 
@@ -21,16 +20,19 @@ function Register() {
   };
 
   const handleRegister = async () => {
+    if (!form.name || !form.phoneNumber) {
+      alert('Please fill in all fields');
+      return;
+    }
 
     try {
-      await API.post('/auth/register', form);
-
+      await registerUser(form);
       alert('Registration Success');
-
       navigate('/');
-
     } catch (err) {
-      alert('Registration Failed');
+      const errorMessage = err.response?.data?.message || err.message || 'Registration Failed';
+      alert(`Registration Failed: ${errorMessage}`);
+      console.error('Registration error:', err);
     }
   };
 
@@ -132,19 +134,9 @@ function Register() {
 
         <div style={formGroupStyle}>
           <input
-            type="email"
-            name="email"
-            placeholder="Email address"
-            onChange={handleChange}
-            style={inputStyle}
-          />
-        </div>
-
-        <div style={formGroupStyle}>
-          <input
-            type="password"
-            name="password"
-            placeholder="Password"
+            type="tel"
+            name="phoneNumber"
+            placeholder="Phone number"
             onChange={handleChange}
             style={inputStyle}
           />

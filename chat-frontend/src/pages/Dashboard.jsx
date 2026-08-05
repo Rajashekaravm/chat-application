@@ -1,23 +1,27 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import API from '../services/api';
 
 function Dashboard() {
 
   const navigate = useNavigate();
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
-  const users = [
-    {
-      id: 1,
-      name: 'Ravi'
-    },
-    {
-      id: 2,
-      name: 'Kiran'
-    },
-    {
-      id: 3,
-      name: 'Arjun'
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await API.get('/users/all');
+      setUsers(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setLoadingUsers(false);
     }
-  ];
+  };
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -122,7 +126,23 @@ function Dashboard() {
         </div>
 
         <div style={userListStyle}>
-          {
+          {loadingUsers ? (
+            <div style={{
+              padding: 'var(--space-lg)',
+              textAlign: 'center',
+              color: 'var(--color-text-secondary)'
+            }}>
+              <p>Loading users...</p>
+            </div>
+          ) : users.length === 0 ? (
+            <div style={{
+              padding: 'var(--space-lg)',
+              textAlign: 'center',
+              color: 'var(--color-text-secondary)'
+            }}>
+              <p>No users found</p>
+            </div>
+          ) : (
             users.map(user => (
               <div
                 key={user.id}
@@ -140,10 +160,15 @@ function Dashboard() {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                {user.name}
+                <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+                  {user.name}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                  {user.phoneNumber}
+                </div>
               </div>
             ))
-          }
+          )}
         </div>
 
         <button

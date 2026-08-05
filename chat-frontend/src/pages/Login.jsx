@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import API from '../services/api';
+import { sendOtp, verifyOtp } from '../services/authService';
 
 function Login() {
 
   const navigate = useNavigate();
 
+  const [otpSent, setOtpSent] = useState(false);
+  const [displayOtp, setDisplayOtp] = useState('');
   const [form, setForm] = useState({
-    email: '',
-    password: ''
+    phoneNumber: '',
+    otp: ''
   });
 
   const handleChange = (e) => {
@@ -18,17 +20,42 @@ function Login() {
     });
   };
 
-  const handleLogin = async () => {
-
+  const handleSendOtp = async () => {
+    if (!form.phoneNumber) {
+      alert('Please enter your phone number');
+      return;
+    }
     try {
-      const res = await API.post('/auth/login', form);
+      const res = await sendOtp({ phoneNumber: form.phoneNumber });
+      const otpCode = res.data.otp;
+      setDisplayOtp(otpCode);
+      setOtpSent(true);
+      // Display OTP from response for demo/testing
+      alert(`OTP sent successfully!\n\n📱 Your OTP: ${otpCode}\n\n(For development/testing only)`);
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'Unable to send OTP';
+      alert(`Unable to send OTP: ${errorMessage}`);
+      console.error('OTP send error:', err);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!form.otp) {
+      alert('Please enter the OTP');
+      return;
+    }
+    try {
+      const res = await verifyOtp({
+        phoneNumber: form.phoneNumber,
+        otp: form.otp
+      });
 
       localStorage.setItem('token', res.data.token);
-
       navigate('/dashboard');
-
     } catch (err) {
-      alert('Login Failed');
+      const errorMessage = err.response?.data?.message || err.message || 'OTP verification failed';
+      alert(`Error: ${errorMessage}`);
+      console.error('OTP verification error:', err);
     }
   };
 
@@ -119,9 +146,9 @@ function Login() {
 
         <div style={formGroupStyle}>
           <input
-            type="email"
-            name="email"
-            placeholder="Email address"
+            type="tel"
+            name="phoneNumber"
+            placeholder="Phone number"
             onChange={handleChange}
             style={inputStyle}
           />
@@ -129,16 +156,35 @@ function Login() {
 
         <div style={formGroupStyle}>
           <input
-            type="password"
-            name="password"
-            placeholder="Password"
+            type="text"
+            name="otp"
+            placeholder={otpSent ? 'Enter OTP' : 'OTP will arrive shortly'}
+            value={form.otp}
             onChange={handleChange}
             style={inputStyle}
           />
         </div>
 
+        {otpSent && displayOtp && (
+          <div style={{
+            ...formGroupStyle,
+            background: '#ecfdf5',
+            border: '2px solid #10b981',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-md)',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: '0 0 0.5rem 0', color: '#059669', fontSize: '0.875rem', fontWeight: '600' }}>
+              Dev/Test OTP
+            </p>
+            <p style={{ margin: '0', color: '#047857', fontSize: '1.875rem', fontWeight: '700', letterSpacing: '0.25rem' }}>
+              {displayOtp}
+            </p>
+          </div>
+        )}
+
         <button
-          onClick={handleLogin}
+          onClick={otpSent ? handleVerifyOtp : handleSendOtp}
           style={buttonStyle}
           onMouseEnter={(e) => {
             e.target.style.transform = 'translateY(-2px)';
@@ -149,7 +195,7 @@ function Login() {
             e.target.style.boxShadow = 'var(--shadow-md)';
           }}
         >
-          Sign In
+          {otpSent ? 'Verify OTP' : 'Send OTP'}
         </button>
 
         <p style={linkStyle}>

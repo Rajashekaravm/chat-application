@@ -1,17 +1,18 @@
 package com.chatapplication.controller;
 
-import com.chatapplication.dto.LoginRequest;
-import com.chatapplication.model.User;
-import com.chatapplication.repository.UserRepository;
-import com.chatapplication.service.AuthService;
-import com.chatapplication.util.JwtUtil;
-import lombok.RequiredArgsConstructor;
+import java.util.Map;
+
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
+import com.chatapplication.dto.OtpRequest;
+import com.chatapplication.dto.OtpVerifyRequest;
+import com.chatapplication.model.User;
+import com.chatapplication.service.AuthService;
+
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/auth")
@@ -25,9 +26,18 @@ public class AuthController {
         return service.register(user);
     }
 
-    @PostMapping("/login")
-    public Map<String, String> login(@RequestBody LoginRequest req) {
-        String token = service.login(req.getEmail(), req.getPassword());
+    @PostMapping("/otp/send")
+    public Map<String, String> sendOtp(@RequestBody OtpRequest req) {
+        String otp = service.sendOtp(req.getPhoneNumber());
+        return Map.of(
+            "message", "OTP sent successfully",
+            "otp", otp  // For development/testing only - remove in production
+        );
+    }
+
+    @PostMapping("/otp/verify")
+    public Map<String, String> verifyOtp(@RequestBody OtpVerifyRequest req) {
+        String token = service.verifyOtp(req.getPhoneNumber(), req.getOtp());
         return Map.of("token", token);
     }
 }

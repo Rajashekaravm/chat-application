@@ -1,33 +1,71 @@
 package com.chatapplication.service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.stereotype.Service;
+
 import com.chatapplication.model.User;
 import com.chatapplication.repository.UserRepository;
 import com.chatapplication.util.JwtUtil;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository repo;
-    private final PasswordEncoder encoder;
     private final JwtUtil jwt;
+    private final SmsService smsService;
+
+    private final Map<String, OtpEntry> otpCache = new ConcurrentHashMap<>();
 
     public User register(User user) {
-        user.setPassword(encoder.encode(user.getPassword()));
         return repo.save(user);
     }
 
-    public String login(String email, String password) {
-        User user = repo.findByEmail(email)
+    public String sendOtp(String phoneNumber) {
+        User user = repo.findByPhoneNumber(phoneNumber)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (!encoder.matches(password, user.getPassword())) {
-            throw new RuntimeException("Invalid credentials");
+        String otp = String.valueOf((int) (Math.random() * 900000) + 100000);
+        otpCache.put(phoneNumber, new OtpEntry(otp, Instant.now().plus(5, ChronoUnit.MINUTES)));
+
+        // Log for development
+        log.info("========================================");
+        log.info("OTP Generated - Phone: {}, OTP: {}", phoneNumber, otp);
+        log.info("Valid for 5 minutes");
+        log.info("========================================");
+
+        // Send via AWS SNS
+        try {
+            smsService.sendOtpSms(phoneNumber, otp);
+        } catch (Exception e) {
+            log.error("Failed to send OTP via SMS: {}", e.getMessage());
+            // Don't throw - still return OTP for testing. In production, you may want to throw
+        }
+        
+        return otp;
+    }
+
+    public String verifyOtp(String phoneNumber, String otp) {
+        User user = repo.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        OtpEntry entry = otpCache.get(phoneNumber);
+        if (entry == null || !entry.code().equals(otp) || Instant.now().isAfter(entry.expiresAt())) {
+            throw new RuntimeException("Invalid or expired OTP");
         }
 
-        return jwt.generateToken(user.getEmail());
+        otpCache.remove(phoneNumber);
+        return jwt.generateToken(user.getPhoneNumber());
+    }
+
+    private record OtpEntry(String code, Instant expiresAt) {
     }
 }

@@ -12,7 +12,6 @@ public class User {
     private String id;
     private String name;
     @Indexed(unique = true)
-    private String email;
-    private String password;
+    private String phoneNumber;
     private String role = "USER";
 }

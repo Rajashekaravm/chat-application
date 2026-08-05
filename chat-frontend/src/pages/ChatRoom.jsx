@@ -8,6 +8,8 @@ import {
   disconnectWebSocket
 } from '../services/websocketService';
 
+import API from '../services/api';
+
 function ChatRoom() {
 
   // URL example:
@@ -23,6 +25,24 @@ function ChatRoom() {
   const [messages, setMessages] = useState([]);
 
   const [message, setMessage] = useState('');
+
+  const [loadingMessages, setLoadingMessages] = useState(true);
+
+  const fetchChatHistory = async () => {
+    try {
+      const res = await API.get(`/messages/${chatId}`);
+      setMessages(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch chat history:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  useEffect(() => {
+    setLoadingMessages(true);
+    fetchChatHistory();
+  }, [chatId]);
 
   useEffect(() => {
 
@@ -113,7 +133,8 @@ function ChatRoom() {
 
   const messageStyle = {
     display: 'flex',
-    marginBottom: 'var(--space-md)'
+    marginBottom: 'var(--space-md)',
+    width: '100%'
   };
 
   const messageBubbleStyle = {
@@ -209,8 +230,15 @@ function ChatRoom() {
 
       <div style={messagesContainerStyle}>
 
-        {
-          messages.length === 0 ? (
+        {loadingMessages ? (
+          <div style={{
+            textAlign: 'center',
+            color: 'var(--color-text-secondary)',
+            padding: 'var(--space-xl)'
+          }}>
+            <p>Loading messages...</p>
+          </div>
+        ) : messages.length === 0 ? (
             <div style={{
               textAlign: 'center',
               color: 'var(--color-text-secondary)',
@@ -228,15 +256,13 @@ function ChatRoom() {
                   justifyContent: msg.senderId === 'user1' ? 'flex-end' : 'flex-start'
                 }}
               >
-                <div>
-                  {msg.senderId !== 'user1' && (
-                    <div style={senderInfoStyle}>
-                      {msg.senderId}
-                    </div>
-                  )}
-                  <div style={msg.senderId === 'user1' ? senderBubbleStyle : receiverBubbleStyle}>
-                    {msg.content}
+                {msg.senderId !== 'user1' && (
+                  <div style={senderInfoStyle}>
+                    {msg.senderId}
                   </div>
+                )}
+                <div style={msg.senderId === 'user1' ? senderBubbleStyle : receiverBubbleStyle}>
+                  {msg.content}
                 </div>
               </div>
             ))
