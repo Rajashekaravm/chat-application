@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import {
   connectWebSocket,
@@ -10,17 +10,49 @@ import {
 
 import API from '../services/api';
 
-function ChatRoom() {
+const mergeMessages = (...groups) => {
+  const mergedMessages = [];
+  const seenIds = new Set();
 
-  // URL example:
-  // /chat/123
+  groups.forEach((group) => {
+    group.forEach((msg) => {
+      const id = msg.id ? String(msg.id) : null;
+      if (id && seenIds.has(id)) {
+        return;
+      }
+      if (id) {
+        seenIds.add(id);
+      }
+      mergedMessages.push(msg);
+    });
+  });
 
-  const { userId } = useParams();
+  return mergedMessages;
+};
 
+const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+const getDateLabel = (date) => {
+  const today = new Date();
+  if (getDateKey(date) === getDateKey(today)) {
+    return 'Today';
+  }
+
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (getDateKey(date) === getDateKey(yesterday)) {
+    return 'Yesterday';
+  }
+
+  return date.toLocaleDateString([], {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+function ChatRoom({ chatId, contactName, currentUserId }) {
   const navigate = useNavigate();
-
-  // For now using userId as chatId
-  const chatId = userId;
 
   const [messages, setMessages] = useState([]);
 
@@ -28,20 +60,30 @@ function ChatRoom() {
 
   const [loadingMessages, setLoadingMessages] = useState(true);
 
-  const fetchChatHistory = async () => {
-    try {
-      const res = await API.get(`/messages/${chatId}`);
-      setMessages(res.data || []);
-    } catch (err) {
-      console.error('Failed to fetch chat history:', err);
-    } finally {
-      setLoadingMessages(false);
-    }
-  };
-
   useEffect(() => {
+    let active = true;
+
+    const fetchChatHistory = async () => {
+      try {
+        const res = await API.get(`/messages/${chatId}`);
+        if (active) {
+          setMessages((previousMessages) => mergeMessages(res.data || [], previousMessages));
+        }
+      } catch (err) {
+        console.error('Failed to fetch chat history:', err);
+      } finally {
+        if (active) {
+          setLoadingMessages(false);
+        }
+      }
+    };
+
     setLoadingMessages(true);
     fetchChatHistory();
+
+    return () => {
+      active = false;
+    };
   }, [chatId]);
 
   useEffect(() => {
@@ -49,11 +91,7 @@ function ChatRoom() {
     connectWebSocket(
       chatId,
       (msg) => {
-
-        setMessages(prev => [
-          ...prev,
-          msg
-        ]);
+        setMessages((previousMessages) => mergeMessages(previousMessages, [msg]));
       }
     );
 
@@ -73,7 +111,7 @@ function ChatRoom() {
 
       chatId: chatId,
 
-      senderId: 'user1',
+      senderId: currentUserId,
 
       content: message,
 
@@ -88,7 +126,9 @@ function ChatRoom() {
   const containerStyle = {
     display: 'flex',
     flexDirection: 'column',
-    height: '100vh',
+    height: '100%',
+    minHeight: 0,
+    minWidth: 0,
     background: 'var(--color-bg)'
   };
 
@@ -124,6 +164,7 @@ function ChatRoom() {
 
   const messagesContainerStyle = {
     flex: 1,
+    minHeight: 0,
     overflowY: 'auto',
     padding: 'var(--space-lg)',
     display: 'flex',
@@ -133,7 +174,7 @@ function ChatRoom() {
 
   const messageStyle = {
     display: 'flex',
-    marginBottom: 'var(--space-md)',
+    marginBottom: 0,
     width: '100%'
   };
 
@@ -141,6 +182,9 @@ function ChatRoom() {
     maxWidth: '60%',
     padding: 'var(--space-md)',
     borderRadius: 'var(--radius-lg)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.25rem',
     wordWrap: 'break-word'
   };
 
@@ -162,14 +206,6 @@ function ChatRoom() {
     boxShadow: 'var(--shadow-sm)'
   };
 
-  const senderInfoStyle = {
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    marginBottom: 'var(--space-xs)',
-    color: 'var(--color-primary)',
-    textTransform: 'uppercase'
-  };
-
   const inputAreaStyle = {
     display: 'flex',
     gap: 'var(--space-sm)',
@@ -181,6 +217,9 @@ function ChatRoom() {
 
   const inputStyle = {
     flex: 1,
+    width: 'auto',
+    minWidth: 0,
+    marginBottom: 0,
     padding: 'var(--space-md)',
     fontSize: '1rem',
     border: '1px solid var(--color-border)',
@@ -205,11 +244,21 @@ function ChatRoom() {
     whiteSpace: 'nowrap'
   };
 
+  const orderedMessages = [...messages].sort((first, second) => {
+    const firstTime = Date.parse(first.timestamp);
+    const secondTime = Date.parse(second.timestamp);
+    if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
+      return 0;
+    }
+    return firstTime - secondTime;
+  });
+  let previousDateKey = null;
+
   return (
 
-    <div style={containerStyle}>
+    <div className="chat-room" style={containerStyle}>
 
-      <div style={headerStyle}>
+      <div className="chat-room-header" style={headerStyle}>
         <button
           onClick={() => navigate('/dashboard')}
           style={backButtonStyle}
@@ -224,7 +273,7 @@ function ChatRoom() {
           ←
         </button>
         <h2 style={h2Style}>
-          Chat with User {userId}
+          {contactName ? `Chat with ${contactName}` : 'Chat'}
         </h2>
       </div>
 
@@ -247,25 +296,43 @@ function ChatRoom() {
               <p>No messages yet. Start the conversation!</p>
             </div>
           ) : (
-            messages.map((msg, index) => (
+            orderedMessages.map((msg, index) => {
+              const messageDate = msg.timestamp ? new Date(msg.timestamp) : null;
+              const hasValidTimestamp = messageDate && !Number.isNaN(messageDate.getTime());
+              const dateKey = hasValidTimestamp ? getDateKey(messageDate) : null;
+              const showDate = dateKey && dateKey !== previousDateKey;
+              if (dateKey) {
+                previousDateKey = dateKey;
+              }
 
-              <div
-                key={index}
-                style={{
-                  ...messageStyle,
-                  justifyContent: msg.senderId === 'user1' ? 'flex-end' : 'flex-start'
-                }}
-              >
-                {msg.senderId !== 'user1' && (
-                  <div style={senderInfoStyle}>
-                    {msg.senderId}
+              return (
+                <div className="chat-message-group" key={msg.id || index}>
+                  {showDate && (
+                    <div className="chat-date-separator">
+                      <span>{getDateLabel(messageDate)}</span>
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      ...messageStyle,
+                      justifyContent: msg.senderId === currentUserId ? 'flex-end' : 'flex-start'
+                    }}
+                  >
+                    <div style={msg.senderId === currentUserId ? senderBubbleStyle : receiverBubbleStyle}>
+                      <span>{msg.content}</span>
+                      <time
+                        className="chat-message-time"
+                        dateTime={hasValidTimestamp ? messageDate.toISOString() : undefined}
+                      >
+                        {hasValidTimestamp
+                          ? messageDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                          : 'Time unavailable'}
+                      </time>
+                    </div>
                   </div>
-                )}
-                <div style={msg.senderId === 'user1' ? senderBubbleStyle : receiverBubbleStyle}>
-                  {msg.content}
                 </div>
-              </div>
-            ))
+              );
+            })
           )
         }
 

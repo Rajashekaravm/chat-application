@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { sendOtp, verifyOtp } from '../services/authService';
 
 function Login() {
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [otpSent, setOtpSent] = useState(false);
   const [displayOtp, setDisplayOtp] = useState('');
@@ -51,7 +52,7 @@ function Login() {
       });
 
       localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
+      navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'OTP verification failed';
       alert(`Error: ${errorMessage}`);

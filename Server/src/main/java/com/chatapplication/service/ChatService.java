@@ -20,4 +20,17 @@ public class ChatService {
     public List<Chat> getUserChats(String userId) {
         return chatRepo.findByParticipantsContaining(userId);
     }
+
+    public Chat getOrCreateChat(String firstUserId, String secondUserId) {
+        return chatRepo.findByParticipantsContaining(firstUserId).stream()
+                .filter(chat -> chat.getParticipants() != null
+                        && chat.getParticipants().size() == 2
+                        && chat.getParticipants().contains(secondUserId))
+                .findFirst()
+                .orElseGet(() -> {
+                    Chat chat = new Chat();
+                    chat.setParticipants(List.of(firstUserId, secondUserId));
+                    return chatRepo.save(chat);
+                });
+    }
 }
