@@ -1,5 +1,6 @@
 package com.chatapplication.controller;
 
+import com.chatapplication.dto.ChatSummaryDTO;
 import com.chatapplication.model.Chat;
 import com.chatapplication.model.User;
 import com.chatapplication.repository.UserRepository;
@@ -26,8 +27,13 @@ public class ChatController {
     }
 
     @GetMapping("/me")
-    public List<Chat> getMyChats(Authentication authentication) {
-        return service.getUserChats(getCurrentUser(authentication).getId());
+    public List<ChatSummaryDTO> getMyChats(Authentication authentication) {
+        return service.getUserChatSummaries(getCurrentUser(authentication).getId());
+    }
+
+    @PostMapping("/{chatId}/read")
+    public void markRead(@PathVariable String chatId, Authentication authentication) {
+        service.markRead(chatId, getCurrentUser(authentication).getId());
     }
 
     @PostMapping("/with/{otherUserId}")

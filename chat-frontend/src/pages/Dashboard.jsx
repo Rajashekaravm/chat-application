@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import API from '../services/api';
+import { connectWebSocket } from '../services/websocketService';
 import ChatRoom from './ChatRoom';
 import '../styles/dashboard.css';
 
@@ -10,6 +11,26 @@ const getInitials = (name) => (name || '?')
   .map((part) => part.charAt(0))
   .join('')
   .toUpperCase();
+
+const getChatTime = (timestamp) => {
+  if (!timestamp) {
+    return '';
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const today = new Date();
+  const isToday = date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate();
+
+  return isToday
+    ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : date.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+};
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -23,6 +44,8 @@ function Dashboard() {
   const [search, setSearch] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
   const [openingChatUserId, setOpeningChatUserId] = useState(null);
+  const activeChatId = useRef(chatId);
+  activeChatId.current = chatId;
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -52,11 +75,17 @@ function Dashboard() {
   };
 
   const currentUserId = currentUser?.id;
+  const chatIdsKey = chats.map((chat) => chat.id).filter(Boolean).join('|');
   const chatContacts = chats.map((chat) => {
     const otherUserId = chat.participants?.find((id) => String(id) !== String(currentUserId));
     const user = users.find((item) => String(item.id) === String(otherUserId));
     return user ? { chat, user } : null;
-  }).filter(Boolean);
+  }).filter(Boolean).sort((first, second) => {
+    const firstTime = Date.parse(first.chat.lastMessage?.timestamp);
+    const secondTime = Date.parse(second.chat.lastMessage?.timestamp);
+    return (Number.isNaN(secondTime) ? 0 : secondTime)
+      - (Number.isNaN(firstTime) ? 0 : firstTime);
+  });
   const chatContactIds = new Set(chatContacts.map(({ user }) => String(user.id)));
   const newChatUsers = users.filter((user) => (
     String(user.id) !== String(currentUserId)
@@ -77,6 +106,43 @@ function Dashboard() {
   const activeUser = users.find((user) => String(user.id) === String(activeUserId));
   const hasSelectedChat = Boolean(chatId);
 
+  useEffect(() => {
+    if (!currentUserId || !chatIdsKey) {
+      return undefined;
+    }
+
+    const unsubscribe = chatIdsKey.split('|').map((subscribedChatId) => (
+      connectWebSocket(subscribedChatId, (msg) => {
+        const isIncoming = String(msg.senderId) !== String(currentUserId);
+        const isOpenChat = String(activeChatId.current) === String(subscribedChatId);
+
+        setChats((previousChats) => previousChats.map((chat) => (
+          String(chat.id) === String(subscribedChatId)
+            ? {
+              ...chat,
+              lastMessage: msg,
+              unreadCount: isIncoming && !isOpenChat
+                ? (chat.unreadCount || 0) + 1
+                : 0
+            }
+            : chat
+        )));
+      })
+    ));
+
+    return () => unsubscribe.forEach((stop) => stop());
+  }, [chatIdsKey, currentUserId]);
+
+  useEffect(() => {
+    if (chatId) {
+      setChats((previousChats) => previousChats.map((chat) => (
+        String(chat.id) === String(chatId)
+          ? { ...chat, unreadCount: 0 }
+          : chat
+      )));
+    }
+  }, [chatId]);
+
   const openChat = async (user) => {
     setChatError('');
     setOpeningChatUserId(user.id);
@@ -89,7 +155,10 @@ function Dashboard() {
         || (await API.post(`/chats/with/${user.id}`)).data;
 
       if (!existingChat) {
-        setChats((previousChats) => [...previousChats, chat]);
+        setChats((previousChats) => [
+          ...previousChats,
+          { ...chat, lastMessage: null, unreadCount: 0 }
+        ]);
       }
       setShowNewChat(false);
       navigate(`/chat/${chat.id}`);
@@ -168,6 +237,10 @@ function Dashboard() {
               const chat = showNewChat ? null : contact.chat;
               const user = showNewChat ? contact : contact.user;
               const isActive = chat && String(chat.id) === chatId;
+              const unreadCount = isActive ? 0 : chat?.unreadCount || 0;
+              const preview = chat?.lastMessage?.content
+                || user.phoneNumber
+                || 'Tap to open conversation';
 
               return (
                 <button
@@ -182,10 +255,20 @@ function Dashboard() {
                   </span>
                   <span className="contact-copy">
                     <span className="contact-name">{user.name || 'Unknown contact'}</span>
-                    <span className="contact-preview">
-                      {user.phoneNumber || 'Tap to open conversation'}
-                    </span>
+                    <span className="contact-preview">{preview}</span>
                   </span>
+                  {chat && (
+                    <span className="contact-meta">
+                      {chat.lastMessage?.timestamp && (
+                        <time>{getChatTime(chat.lastMessage.timestamp)}</time>
+                      )}
+                      {unreadCount > 0 && (
+                        <span className="unread-badge">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               );
             })

@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import {
   connectWebSocket,
-  sendMessage,
-  disconnectWebSocket
+  sendMessage
 } from '../services/websocketService';
 
 import API from '../services/api';
@@ -88,17 +87,23 @@ function ChatRoom({ chatId, contactName, currentUserId }) {
 
   useEffect(() => {
 
-    connectWebSocket(
+    return connectWebSocket(
       chatId,
       (msg) => {
         setMessages((previousMessages) => mergeMessages(previousMessages, [msg]));
+        if (String(msg.senderId) !== String(currentUserId)) {
+          API.post(`/chats/${chatId}/read`).catch((err) => {
+            console.error('Failed to mark chat as read:', err);
+          });
+        }
       }
     );
+  }, [chatId, currentUserId]);
 
-    return () => {
-      disconnectWebSocket();
-    };
-
+  useEffect(() => {
+    API.post(`/chats/${chatId}/read`).catch((err) => {
+      console.error('Failed to mark chat as read:', err);
+    });
   }, [chatId]);
 
   const handleSend = () => {
